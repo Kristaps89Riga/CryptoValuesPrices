@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="UTF-8">
+  <title>Bitcoin cena – 3 mēneši ar filtru un krāsām</title>
+  <style>
+    body {
+      background-image: url('assets/bitcoin.webp');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      color: #fff;
+    }
+    h1 {
+      text-align: center;
+    }
+    #chartContainer {
+      max-width: 800px;
+      margin: auto;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 20px;
+      border: 1px solid #ddd;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
+    .btn-group {
+      text-align: center;
+      margin: 20px 0;
+    }
+    .btn-group button {
+      padding: 10px 20px;
+      margin: 0 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Bitcoin (BTC) cena – pēdējie 3 mēneši</h1>
+  <div class="btn-group">
+    <button id="btnAll">Visas dienas</button>
+    <button id="btnUp">Pieauguma dienas</button>
+    <button id="btnDown">Krituma dienas</button>
+  </div>
+  <div id="chartContainer">
+    <canvas id="btcChart"></canvas>
+  </div>
+
+  <script>
+    let fullData = null;
+    let chart = null;
+
+    async function fetchBTCData() {
+      const vsCurrency = 'usd';
+      const fromDate = '2025-07-25';
+      const toDate = '2025-10-25';
+
+      const fromTs = Math.floor(new Date(fromDate + 'T00:00:00Z').getTime() / 1000);
+      const toTs = Math.floor(new Date(toDate + 'T23:59:59Z').getTime() / 1000);
+
+      const url = `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=${vsCurrency}&from=${fromTs}&to=${toTs}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP error ${resp.status}`);
+      const data = await resp.json();
+
+      const prices = data.prices;
+      const rows = prices.map(item => {
+        const date = new Date(item[0]).toISOString().split('T')[0];
+        const price = item[1];
+        return { date, price };
+      });
+      return rows;
+    }
+
+    function createChart(labels, values, fillColors) {
+      const ctx = document.getElementById('btcChart').getContext('2d');
+      if (chart) {
+        chart.destroy();
+      }
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'BTC cena (USD)',
+            data: values,
+            borderColor: 'rgba(75,192,192,1)',
+            backgroundColor: fillColors,
+            pointRadius: 2,
+            fill: true,
+            tension: 0.1
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              display: true,
+              title: {
+                display: true,
+                text: 'Datums'
+              }
+            },
+            y: {
+              display: true,
+              title: {
+                display: true,
+                text: 'Cena (USD)'
+              }
+            }
+          },
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    function filterData(mode) {
+      if (!fullData) return;
+      const labels = [];
+      const values = [];
+      const fillColors = [];
+
+      if (mode === 'all') {
+        fullData.forEach(r => {
+          labels.push(r.date);
+          values.push(r.price);
+          fillColors.push('rgba(0,0,0,0.1)'); // Neitrāls pelēks
+        });
+      } else {
+        for (let i = 1; i < fullData.length; i++) {
+          const prev = fullData[i-1].price;
+          const curr = fullData[i].price;
+          if (mode === 'up' && curr > prev) {
+            labels.push(fullData[i].date);
+            values.push(curr);
+            fillColors.push('rgba(0,255,0,0.2)'); // Zaļš pieaugumam
+          }
+          if (mode === 'down' && curr < prev) {
+            labels.push(fullData[i].date);
+            values.push(curr);
+            fillColors.push('rgba(255,0,0,0.2)'); // Sarkans kritumam
+          }
+        }
+      }
+
+      createChart(labels, values, fillColors);
+    }
+
+    async function init() {
+      try {
+        fullData = await fetchBTCData();
+        filterData('all');
+        document.getElementById('btnAll').addEventListener('click', () => filterData('all'));
+        document.getElementById('btnUp').addEventListener('click', () => filterData('up'));
+        document.getElementById('btnDown').addEventListener('click', () => filterData('down'));
+      } catch(err) {
+        document.getElementById('chartContainer').textContent = 'Nevarēja ielādēt datus: ' + err.message;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
